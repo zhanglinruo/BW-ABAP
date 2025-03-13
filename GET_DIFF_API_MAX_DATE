@@ -1,0 +1,98 @@
+*&---------------------------------------------------------------------*
+*& Report ZTEST_LINO
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT ZBW_STAT_TABLE.
+
+TYPE-POOLS:ABAP,SRSC.
+
+DATA: IT_FIELDS TYPE TABLE OF SRSC_S_FIELDS,
+      WA_FIELDS TYPE SRSC_S_FIELDS.
+
+DATA: IT_TEST TYPE TABLE OF ZSTAT_TABLE,
+      WA_TEST TYPE ZSTAT_TABLE.
+DATA: dyn_table TYPE REF TO data.
+DATA: dyn_wa TYPE REF TO data.
+data: val_str type string.
+
+FIELD-SYMBOLS: <dyn_table> TYPE table,
+               <dyn_wa> TYPE ANY,
+               <VAULE> .
+
+SELECT A~TABLENM,B~DESCRIPTION INTO TABLE @DATA(IT_DSO)
+  FROM RSOADSOPART AS A
+  LEFT JOIN RSOADSOT AS B
+  ON A~ADSONM = B~ADSONM
+  WHERE B~LANGU = '1' AND B~OBJVERS = 'A' AND B~TTYP = 'EUSR'.
+SORT IT_DSO BY TABLENM.
+
+SELECT * INTO TABLE IT_TEST FROM ZSTAT_TABLE.
+
+
+  CLEAR WA_TEST.
+
+  LOOP AT IT_TEST INTO WA_TEST.
+
+*创建动态表结构
+     CREATE DATA dyn_table TYPE TABLE OF (WA_TEST-ZTABLE).
+*创建动态内表
+     ASSIGN dyn_table->* TO <dyn_table>.
+*创建动态工作区结构
+     CREATE DATA dyn_wa LIKE LINE OF <dyn_table>.
+*创建动态工作区
+     ASSIGN dyn_wa->* TO <dyn_wa>.
+*动态取数
+    CLEAR:WA_FIELDS ,IT_FIELDS,<dyn_table>,<dyn_wa>.
+    IF WA_TEST-ZFIELD IS NOT INITIAL .
+      WA_FIELDS-FIELDNM = WA_TEST-ZFIELD.
+      APPEND WA_FIELDS TO IT_FIELDS.
+    ENDIF.
+    CLEAR WA_FIELDS.
+    IF WA_TEST-ZFIELD1 IS NOT INITIAL .
+      WA_FIELDS-FIELDNM = WA_TEST-ZFIELD1.
+      APPEND WA_FIELDS TO IT_FIELDS.
+    ENDIF.
+    CLEAR WA_FIELDS.
+    IF WA_TEST-ZFIELD2 IS NOT INITIAL .
+      WA_FIELDS-FIELDNM = WA_TEST-ZFIELD2.
+      APPEND WA_FIELDS TO IT_FIELDS.
+    ENDIF.
+
+    SELECT DISTINCT (IT_FIELDS) FROM (WA_TEST-ZTABLE) INTO CORRESPONDING FIELDS OF TABLE <dyn_table>.
+    SORT  <dyn_table> DESCENDING BY (WA_TEST-ZFIELD)  (WA_TEST-ZFIELD1) (WA_TEST-ZFIELD2).
+
+    READ TABLE IT_DSO INTO DATA(WA_DSO)
+    WITH KEY TABLENM = WA_TEST-ZTABLE BINARY SEARCH.
+    IF SY-SUBRC IS INITIAL.
+      WA_TEST-ZCOMMENT = WA_DSO-DESCRIPTION.
+    ENDIF.
+    CLEAR WA_DSO.
+*内表处理
+    LOOP AT  <dyn_table> ASSIGNING <dyn_wa> FROM 1 TO 1.
+      CLEAR: WA_FIELDS,WA_TEST-ZRESULT.
+      LOOP AT IT_FIELDS INTO WA_FIELDS..
+        ASSIGN COMPONENT WA_FIELDS-FIELDNM OF STRUCTURE <dyn_wa> TO <VAULE>.
+        IF SY-SUBRC IS INITIAL.
+          WA_TEST-ZRESULT = WA_TEST-ZRESULT &&  <VAULE> && '.' .
+        ENDIF.
+      ENDLOOP.
+    ENDLOOP.
+
+    IF WA_TEST-ZRESULT IS NOT INITIAL.
+      clear val_str.
+      val_str =  WA_TEST-ZRESULT.
+      SHIFT val_str RIGHT DELETING TRAILING '.'.
+      SHIFT val_str LEFT DELETING LEADING ''.
+      WA_TEST-ZRESULT = val_str.
+    ENDIF.
+    MODIFY  IT_TEST FROM WA_TEST.
+    CLEAR WA_TEST.
+
+  ENDLOOP.
+
+  CLEAR IT_DSO.
+
+  MODIFY ZSTAT_TABLE FROM TABLE IT_TEST.
+
+  COMMIT WORK AND WAIT.
