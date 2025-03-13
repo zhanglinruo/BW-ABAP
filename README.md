@@ -1,2 +1,2 @@
 # BW-ABAP
-Using ABAP to read BW query
+ABAP IN BW
